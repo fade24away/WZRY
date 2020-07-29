@@ -11,7 +11,7 @@
           :action="$http.defaults.baseURL + '/upload'"
           :show-file-list="false"
           :on-success="afterUpload"
-        >
+          :before-upload="beforeAvatarUpload">
           <img v-if="model.icon" :src="model.icon" class="avatar">
           <i v-else class="el-icon-plus avatar-uploader-icon"></i>
         </el-upload>
