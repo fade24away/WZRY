@@ -1,7 +1,8 @@
-const { findByIdAndUpdate } = require("../../models/Category")
-
 module.exports = app => {
   const express = require("express")
+  const jwt = require('jsonwebtoken')
+  // const assert = require('http-assert')
+  const AdminUser = require('../../models/AdminUser')
   const router = express.Router({
     mergeParams: true
   })
@@ -37,7 +38,30 @@ module.exports = app => {
     })
   })
 
-  app.use('/admin/api/rest/:resource', async(req, res, next) => {
+  // 登录校验中间件
+  const auth = async (req, res, next) => {
+    const token = String(req.headers.authorization || '').split(' ').pop()
+    if(!token) {
+      return res.status(401).send({
+        message: '请先登录'
+      })
+    }
+    const { id } = jwt.verify(token, app.get('secret'))
+    if(!id) {
+      return res.status(401).send({
+        message: '请先登录'
+      })
+    }
+    req.user = await AdminUser.findById(id)
+    if(!req.user) {
+      return res.status(401).send({
+        message: '请先登录'
+      })
+    }
+    await next()
+  }
+
+  app.use('/admin/api/rest/:resource', auth, async(req, res, next) => {
     const modelName = require('inflection').classify(req.params.resource)
     req.Model = require(`../../models/${modelName}`)
     next()
@@ -45,7 +69,7 @@ module.exports = app => {
 
   const multer = require('multer')
   const upload = multer({ dest: __dirname + '/../../uploads' })
-  app.post('/admin/api/upload', upload.single('file'), async (req, res) => {
+  app.post('/admin/api/upload', auth, upload.single('file'), async (req, res) => {
     const file = req.file
     file.url = `http://localhost:3000/uploads/${file.filename}`
     res.send(file)
@@ -53,12 +77,18 @@ module.exports = app => {
 
   app.post('/admin/api/login', async (req, res) => {
     const { username, password } = req.body
-    const AdminUser = require('../../models/AdminUser')
-    const user = await AdminUser.findOne({username})
+    const user = await AdminUser.findOne({username}).select('+password')
     if(!user) {
       return res.status(422).send({
         message: '用户不存在'
       })
     }
+    if(password !== user.password) {
+      return res.status(422).send({
+        message: '密码错误'
+      })
+    }
+    const token = jwt.sign({ id: user._id }, app.get('secret'))
+    res.send({token})
   })
 }
